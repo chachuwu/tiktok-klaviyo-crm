@@ -37,6 +37,7 @@ export class EventLog {
       );
     } catch (err) {
       logger.error({ err, event_id: record.event_id }, 'Failed to insert event log record');
+      throw err;
     }
   }
 

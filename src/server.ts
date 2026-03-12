@@ -107,8 +107,8 @@ async function bootstrap(): Promise<void> {
   const app = express();
 
   // Global middleware
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.json({ limit: '10kb' }));
+  app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
   // ----------------------------------------------------------------
   // Routes
@@ -152,11 +152,25 @@ async function bootstrap(): Promise<void> {
     createKlaviyoWebhookRouter(outboundPipeline, env.KLAVIYO_WEBHOOK_SECRET)
   );
 
+  // Admin API key middleware — protects OAuth management and event-set routes
+  const requireAdminKey = (
+    req: import('express').Request,
+    res: import('express').Response,
+    next: import('express').NextFunction
+  ): void => {
+    const provided = req.headers['x-admin-api-key'];
+    if (!provided || provided !== env.ADMIN_API_KEY) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    next();
+  };
+
   // OAuth routes
-  app.use('/auth', createOAuthRouter(oauthClient, tokenStore, redis));
+  app.use('/auth', requireAdminKey, createOAuthRouter(oauthClient, tokenStore, redis));
 
   // Event set routes
-  app.use('/event-sets', createEventSetRouter(eventSetManager, tokenStore));
+  app.use('/event-sets', requireAdminKey, createEventSetRouter(eventSetManager, tokenStore));
 
   // ----------------------------------------------------------------
   // Start server

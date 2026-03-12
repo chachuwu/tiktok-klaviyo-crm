@@ -1,9 +1,26 @@
 import { Router, Request, Response } from 'express';
 import express from 'express';
 import crypto from 'crypto';
+import { z } from 'zod';
 import { TikTokLeadWebhookPayload } from '../types';
 import { logger } from '../logging/logger';
 import { InboundPipeline } from '../inbound-pipeline';
+
+const TikTokLeadFieldSchema = z.object({
+  name: z.string(),
+  values: z.array(z.string()),
+});
+
+const TikTokLeadWebhookSchema = z.object({
+  advertiser_id: z.string().min(1),
+  form_id: z.string().min(1),
+  lead_id: z.string().min(1),
+  ad_id: z.string().min(1),
+  adgroup_id: z.string().min(1),
+  campaign_id: z.string().min(1),
+  create_time: z.number().int().positive(),
+  field_data: z.array(TikTokLeadFieldSchema),
+});
 
 /**
  * Verifies a TikTok Lead Gen webhook signature.
@@ -69,10 +86,16 @@ export function createTikTokLeadWebhookRouter(
       return res.status(401).json({ error: 'Invalid signature' });
     }
 
-    // Parse body
+    // Parse and validate body
     let payload: TikTokLeadWebhookPayload;
     try {
-      payload = JSON.parse(rawBody.toString('utf8')) as TikTokLeadWebhookPayload;
+      const parsed: unknown = JSON.parse(rawBody.toString('utf8'));
+      const result = TikTokLeadWebhookSchema.safeParse(parsed);
+      if (!result.success) {
+        logger.error({ errors: result.error.errors }, 'TikTok webhook payload failed schema validation');
+        return res.status(400).json({ error: 'Invalid payload schema', details: result.error.errors });
+      }
+      payload = result.data;
     } catch (err) {
       logger.error({ err }, 'Failed to parse TikTok webhook payload');
       return res.status(400).json({ error: 'Invalid JSON payload' });

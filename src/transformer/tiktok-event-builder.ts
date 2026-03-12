@@ -48,7 +48,13 @@ export function buildTikTokPayload(
 
   // Add value and currency for Purchase events
   if (tiktokEvent === 'Purchase') {
-    properties.value = 0;
+    if (event.value === undefined) {
+      throw new Error(
+        `Purchase event is missing a monetary value (event_id: ${event.event_id}). ` +
+          'Ensure Klaviyo metric properties include a numeric "value" field.'
+      );
+    }
+    properties.value = event.value;
     properties.currency = 'USD';
   }
 

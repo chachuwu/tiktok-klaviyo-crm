@@ -63,12 +63,15 @@ export class InboundPipeline {
       // Step 5: Build Klaviyo event payload
       const klaviyoPayload = buildKlaviyoEvent(canonicalEvent);
 
-      // Step 6: Upsert Klaviyo profile first
+      // Step 6: Upsert Klaviyo profile first.
+      // Non-fatal: Klaviyo will auto-create a profile when the event is sent in Step 8.
+      // We still attempt explicit upsert to ensure profile properties (name, phone) are
+      // set before the event arrives. On failure, event creation proceeds anyway.
       const profileAttributes = klaviyoPayload.data.attributes.profile.data.attributes;
       try {
         await this.klaviyoClient.upsertProfile(profileAttributes);
       } catch (err) {
-        logger.warn({ err, lead_id: payload.lead_id }, 'Failed to upsert Klaviyo profile, continuing with event creation');
+        logger.error({ err, lead_id: payload.lead_id }, 'Failed to upsert Klaviyo profile, proceeding with event creation');
       }
 
       // Step 7: Insert event log with pending status

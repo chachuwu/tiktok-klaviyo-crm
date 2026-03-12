@@ -51,6 +51,7 @@ export interface CanonicalCRMEvent {
   advertiser_id?: string;
   campaign_id?: string;
   ad_id?: string;
+  value?: number; // monetary value (e.g. for Purchase events)
   user: CanonicalUser;
   direction: 'inbound' | 'outbound';
 }

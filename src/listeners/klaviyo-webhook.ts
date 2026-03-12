@@ -1,9 +1,34 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import express from 'express';
+import { z } from 'zod';
 import { KlaviyoWebhookEvent } from '../types';
 import { logger } from '../logging/logger';
 import { OutboundPipeline } from '../outbound-pipeline';
+
+const KlaviyoProfileAttributesSchema = z.object({
+  email: z.string().optional(),
+  phone_number: z.string().optional(),
+  first_name: z.string().optional(),
+  last_name: z.string().optional(),
+  external_id: z.string().optional(),
+  properties: z.record(z.unknown()).optional(),
+});
+
+const KlaviyoWebhookEventSchema = z.object({
+  type: z.string(),
+  id: z.string().min(1),
+  attributes: z.object({
+    metric: z.object({ name: z.string().min(1) }),
+    profile: z.object({
+      data: z.object({ attributes: KlaviyoProfileAttributesSchema }),
+    }),
+    properties: z.record(z.unknown()),
+    time: z.string().min(1),
+    unique_id: z.string().min(1),
+    value: z.number().optional(),
+  }),
+});
 
 /**
  * Verifies a Klaviyo webhook signature.
@@ -59,23 +84,34 @@ export function createKlaviyoWebhookRouter(
         return res.status(401).json({ error: 'Invalid signature' });
       }
 
-      // Parse body
+      // Parse and validate body
       let events: KlaviyoWebhookEvent[];
       try {
         const parsed: unknown = JSON.parse(rawBody.toString('utf8'));
 
         // Klaviyo may send a single event or an array
+        let rawEvents: unknown[];
         if (Array.isArray(parsed)) {
-          events = parsed as KlaviyoWebhookEvent[];
+          rawEvents = parsed;
         } else if (parsed && typeof parsed === 'object' && 'type' in parsed) {
-          events = [parsed as KlaviyoWebhookEvent];
+          rawEvents = [parsed];
         } else if (parsed && typeof parsed === 'object' && 'data' in parsed) {
           // Wrapped format: { data: { type: "event", ... } }
-          const wrapped = parsed as { data: KlaviyoWebhookEvent };
-          events = [wrapped.data];
+          rawEvents = [(parsed as { data: unknown }).data];
         } else {
           logger.error('Unexpected Klaviyo webhook payload format');
           return res.status(400).json({ error: 'Unexpected payload format' });
+        }
+
+        // Validate each event against the schema
+        events = [];
+        for (const raw of rawEvents) {
+          const result = KlaviyoWebhookEventSchema.safeParse(raw);
+          if (!result.success) {
+            logger.error({ errors: result.error.errors }, 'Klaviyo webhook event failed schema validation');
+            return res.status(400).json({ error: 'Invalid event schema', details: result.error.errors });
+          }
+          events.push(result.data as KlaviyoWebhookEvent);
         }
       } catch (err) {
         logger.error({ err }, 'Failed to parse Klaviyo webhook payload');

@@ -28,6 +28,9 @@ const envSchema = z.object({
   // Postgres
   POSTGRES_URL: z.string().min(1, 'POSTGRES_URL is required'),
 
+  // Admin
+  ADMIN_API_KEY: z.string().min(32, 'ADMIN_API_KEY must be at least 32 characters'),
+
   // App
   PORT: z.coerce.number().int().positive().default(3000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),

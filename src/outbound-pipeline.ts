@@ -64,7 +64,9 @@ export class OutboundPipeline {
       const eventTime = Math.floor(new Date(event.attributes.time).getTime() / 1000);
 
       // Step 4: Generate deterministic event ID
-      const dedupKey = user.tiktok_lead_id ?? event.id;
+      // Use unique_id + metric name for a stable, dedup-safe key regardless of whether
+      // tiktok_lead_id is present on the Klaviyo profile.
+      const dedupKey = event.attributes.unique_id;
       const eventId = generateEventId(dedupKey, tiktokEvent, eventTime);
 
       // Step 5: Deduplication check
@@ -117,6 +119,7 @@ export class OutboundPipeline {
         event_name: tiktokEvent,
         event_time: eventTime,
         advertiser_id: advertiserId,
+        value: typeof event.attributes.value === 'number' ? event.attributes.value : undefined,
         user,
         direction: 'outbound',
       };
